@@ -1,8 +1,8 @@
 workflows:
   android-release-build:
     name: Mishon EMS Android Release APK Compiler
+    instance_type: mac_mini_m2 # Using the modern M2 machine allocation
     max_build_duration: 30
-    instance_type: mac_mini_m2 # Free tier allocation
 
     environment:
       flutter: stable
@@ -16,49 +16,109 @@ workflows:
         - pattern: 'master'
 
     scripts:
-      - name: Validate System Packages and Pull Dependencies
+      # ----------------------------------------------------
+      # 1. BACKUP REPO SOURCE FILES
+      # ----------------------------------------------------
+      - name: Backup repository
         script: |
-          # Automatically find and switch to the folder containing pubspec.yaml
-          if [ -f "pubspec.yaml" ]; then
-            echo "Root directory contains pubspec.yaml"
-          elif [ -f "mishon_ems_mobile/pubspec.yaml" ]; then
-            cd mishon_ems_mobile
-          else
-            TARGET_DIR=$(find . -name "pubspec.yaml" -exec dirname {} \; | head -n 1)
-            if [ -n "$TARGET_DIR" ]; then cd "$TARGET_DIR"; else echo "pubspec.yaml not found"; exit 1; fi
+          echo ">>> Safely archiving working application state..."
+          mkdir -p /tmp/repo
+          rsync -av ./ /tmp/repo/ \
+            --exclude ".git" \
+            --exclude "build" \
+            --exclude ".dart_tool"
+
+          echo ">>> Purging local workspace to remove corrupted v1 layout..."
+          find . -mindepth 1 -maxdepth 1 -exec rm -rf {} \;
+
+      # ----------------------------------------------------
+      # 2. SCAFFOLD FRESH MODERN ANDROID PIPELINE
+      # ----------------------------------------------------
+      - name: Scaffold Flutter project
+        script: |
+          echo ">>> Generating flawless modern Android container structure..."
+          flutter create --project-name mishon_ems_mobile --platforms=android .
+
+      # ----------------------------------------------------
+      # 3. RESTORE APP SOURCE FILES & INJECT PUBSPEC
+      # ----------------------------------------------------
+      - name: Restore app source files
+        script: |
+          echo ">>> Merging enterprise UI files and engine layers..."
+          rm -rf lib
+          cp -R /tmp/repo/lib ./lib
+
+          echo ">>> Restoring production pubspec configuration file..."
+          if [ -f /tmp/repo/pubspec.yaml ]; then
+            cp /tmp/repo/pubspec.yaml ./pubspec.yaml
           fi
-          
+
           flutter pub get
 
-      - name: Validate Framework Integrity Code Check
+      # ----------------------------------------------------
+      # 4. INJECT NETWORK EXCEPTIONS (NO EXTERNAL DEPENDENCY)
+      # ----------------------------------------------------
+      - name: Inject Production Manifest and Cleartext Exceptions
         script: |
-          if [ -f "pubspec.yaml" ]; then
-            echo "Root directory contains pubspec.yaml"
-          elif [ -f "mishon_ems_mobile/pubspec.yaml" ]; then
-            cd mishon_ems_mobile
-          else
-            TARGET_DIR=$(find . -name "pubspec.yaml" -exec dirname {} \; | head -n 1)
-            if [ -n "$TARGET_DIR" ]; then cd "$TARGET_DIR"; fi
-          fi
-          
-          # Bypassing the static code analyzer to prevent warning roadblocks
-          echo "Skipping strict lint check. Proceeding directly to compiler pipeline."
+          echo ">>> Setting up application directories..."
+          mkdir -p android/app/src/main/res/xml
 
-      - name: Execute Android Target Pipeline Compilation
+          echo ">>> Writing cleartext routing permissions for cloud VM infrastructure..."
+          cat << 'EOF' > android/app/src/main/res/xml/network_security_config.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <network-security-config>
+              <domain-config cleartextTrafficPermitted="true">
+                  <domain includeSubdomains="true">127.0.0.1</domain>
+                  <domain includeSubdomains="true">localhost</domain>
+                  <domain includeSubdomains="true">104.154.76.47</domain>
+              </domain-config>
+          </network-security-config>
+          EOF
+
+          echo ">>> Injecting modern v2 AndroidManifest structure..."
+          cat << 'EOF' > android/app/src/main/AndroidManifest.xml
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+              <application
+                  android:label="Mishon EMS"
+                  android:name="${applicationName}"
+                  android:icon="@mipmap/ic_launcher"
+                  android:networkSecurityConfig="@xml/network_security_config">
+                  <meta-data
+                      android:name="flutterEmbedding"
+                      android:value="2" />
+                  <activity
+                      android:name="io.flutter.embedding.android.FlutterActivity"
+                      android:exported="true"
+                      android:launchMode="singleTop"
+                      android:theme="@style/LaunchTheme"
+                      android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+                      android:hardwareAccelerated="true"
+                      android:windowSoftInputMode="adjustResize">
+                      <meta-data
+                          android:name="io.flutter.embedding.android.NormalTheme"
+                          android:resource="@style/NormalTheme" />
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.category.LAUNCHER"/>
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+      # ----------------------------------------------------
+      # 5. EXECUTE COMPILATION
+      # ----------------------------------------------------
+      - name: Build APK
         script: |
-          if [ -f "pubspec.yaml" ]; then
-            echo "Root directory contains pubspec.yaml"
-          elif [ -f "mishon_ems_mobile/pubspec.yaml" ]; then
-            cd mishon_ems_mobile
-          else
-            TARGET_DIR=$(find . -name "pubspec.yaml" -exec dirname {} \; | head -n 1)
-            if [ -n "$TARGET_DIR" ]; then cd "$TARGET_DIR"; fi
-          fi
-          
+          echo ">>> Initiating release build generation..."
+          flutter pub get
           flutter build apk --release
 
     artifacts:
-      - '**/build/app/outputs/flutter-apk/*.apk'
+      - build/app/outputs/flutter-apk/*.apk
 
     publishing:
       email:
