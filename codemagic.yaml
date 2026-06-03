@@ -41,7 +41,7 @@ workflows:
       email:
         recipients:
           # CHANGE THIS to your real, valid email address to receive build status notifications
-          - target-notification-email@example.com
+          - appropose023@gmail.com
         notify:
           success: true
           failure: true
