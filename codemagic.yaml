@@ -6,8 +6,6 @@ workflows:
     instance_type: linux # Cost-effective and optimal for dedicated Linux/Android toolchain compilation
     
     environment:
-      groups:
-        # If signing properties are added later via Keystore tools, declare variables here.
       flutter: stable
       java: 17
 
@@ -42,8 +40,8 @@ workflows:
     publishing:
       email:
         recipients:
-          # Change this to your monitoring or delivery distribution address
-          - appropose023@ai-gcloud
+          # CHANGE THIS to your real, valid email address to receive build status notifications
+          - target-notification-email@example.com
         notify:
           success: true
           failure: true
