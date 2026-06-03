@@ -1,7 +1,5 @@
-name: Mishon_aoi_inspector
-description: PCB camera inspector app
-publish_to: "none"
-
+name: mishon_ems_mobile
+description: Enterprise Floor Management and Traceability Client Application for Mishon Solutions EMS.
 version: 1.0.0+1
 
 environment:
@@ -10,23 +8,13 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-
-  # Required by your project
-  camera: ^0.10.5
-  http: ^1.2.0
-  image_picker: ^1.1.2
-  image_cropper: ^12.1.0
-  path: ^1.8.3
-  path_provider: ^2.1.0
-
-  # Optional, but Flutter adds these by default
-  cupertino_icons: ^1.0.6
+  intl: ^0.18.1
+  provider: ^6.0.5
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-
-  flutter_lints: ^3.0.0
+  flutter_lints: ^2.0.0
 
 flutter:
   uses-material-design: true
