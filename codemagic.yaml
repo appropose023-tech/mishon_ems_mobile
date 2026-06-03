@@ -2,7 +2,7 @@ workflows:
   android-release-build:
     name: Mishon EMS Android Release APK Compiler
     max_build_duration: 30
-    instance_type: linux
+    instance_type: mac_mini_m2 # Required for Codemagic's 500 free individual plan monthly minutes
     
     environment:
       flutter: stable
