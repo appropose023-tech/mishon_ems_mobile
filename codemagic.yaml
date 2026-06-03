@@ -34,8 +34,8 @@ workflows:
           flutter build apk --release
 
     artifacts:
-      # Using a glob pattern ensures Codemagic locates the APK from the root or subdirectory context
-      - **/build/app/outputs/flutter-apk/*.apk
+      # Wrapped in single quotes to resolve the YAML parser alias conflict
+      - '**/build/app/outputs/flutter-apk/*.apk'
 
     publishing:
       email:
