@@ -3,7 +3,6 @@ workflows:
     name: Mishon EMS Android Release APK Compiler
     max_build_duration: 30
     instance_type: mac_mini_m2 # Free tier allocation
-    working_directory: mishon_ems_mobile
 
     environment:
       flutter: stable
@@ -19,14 +18,42 @@ workflows:
     scripts:
       - name: Validate System Packages and Pull Dependencies
         script: |
+          # Automatically find and switch to the folder containing pubspec.yaml
+          if [ -f "pubspec.yaml" ]; then
+            echo "Root directory contains pubspec.yaml"
+          elif [ -f "mishon_ems_mobile/pubspec.yaml" ]; then
+            cd mishon_ems_mobile
+          else
+            TARGET_DIR=$(find . -name "pubspec.yaml" -exec dirname {} \; | head -n 1)
+            if [ -n "$TARGET_DIR" ]; then cd "$TARGET_DIR"; else echo "pubspec.yaml not found"; exit 1; fi
+          fi
+          
           flutter pub get
 
       - name: Validate Framework Integrity Code Check
         script: |
+          if [ -f "pubspec.yaml" ]; then
+            echo "Root directory contains pubspec.yaml"
+          elif [ -f "mishon_ems_mobile/pubspec.yaml" ]; then
+            cd mishon_ems_mobile
+          else
+            TARGET_DIR=$(find . -name "pubspec.yaml" -exec dirname {} \; | head -n 1)
+            if [ -n "$TARGET_DIR" ]; then cd "$TARGET_DIR"; fi
+          fi
+          
           flutter analyze --fatal-infos --fatal-warnings
 
       - name: Execute Android Target Pipeline Compilation
         script: |
+          if [ -f "pubspec.yaml" ]; then
+            echo "Root directory contains pubspec.yaml"
+          elif [ -f "mishon_ems_mobile/pubspec.yaml" ]; then
+            cd mishon_ems_mobile
+          else
+            TARGET_DIR=$(find . -name "pubspec.yaml" -exec dirname {} \; | head -n 1)
+            if [ -n "$TARGET_DIR" ]; then cd "$TARGET_DIR"; fi
+          fi
+          
           flutter build apk --release
 
     artifacts:
