@@ -2,7 +2,8 @@ workflows:
   android-release-build:
     name: Mishon EMS Android Release APK Compiler
     max_build_duration: 30
-    instance_type: mac_mini_m2 # Required for Codemagic's 500 free individual plan monthly minutes
+    instance_type: mac_mini_m2 # Required for Codemagic's free plan allocation
+    working_directory: mishon_ems_mobile # Tells Codemagic to execute all scripts inside this subdirectory
     
     environment:
       flutter: stable
@@ -33,7 +34,8 @@ workflows:
           flutter build apk --release
 
     artifacts:
-      - build/app/outputs/flutter-apk/*.apk
+      # Using a glob pattern ensures Codemagic locates the APK from the root or subdirectory context
+      - **/build/app/outputs/flutter-apk/*.apk
 
     publishing:
       email:
