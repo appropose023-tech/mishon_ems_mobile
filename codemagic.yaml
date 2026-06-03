@@ -1,7 +1,7 @@
 workflows:
   android-release-build:
     name: Mishon EMS Android Release APK Compiler
-    instance_type: mac_mini_m2 # Using the modern M2 machine allocation
+    instance_type: mac_mini_m2
     max_build_duration: 30
 
     environment:
@@ -17,18 +17,34 @@ workflows:
 
     scripts:
       # ----------------------------------------------------
-      # 1. BACKUP REPO SOURCE FILES
+      # 1. BACKUP REPO SOURCE FILES DYNAMICALLY
       # ----------------------------------------------------
       - name: Backup repository
         script: |
-          echo ">>> Safely archiving working application state..."
-          mkdir -p /tmp/repo
-          rsync -av ./ /tmp/repo/ \
-            --exclude ".git" \
-            --exclude "build" \
-            --exclude ".dart_tool"
+          echo ">>> Locating and archiving working application state..."
+          mkdir -p /tmp/repo/lib
+          
+          # Find where the true lib directory is hiding in the repo layout
+          REAL_LIB_DIR=$(find . -type d -name "lib" | grep -v "node_modules" | head -n 1)
+          REAL_PUBSPEC=$(find . -type f -name "pubspec.yaml" | head -n 1)
+          
+          if [ -n "$REAL_LIB_DIR" ]; then
+            echo "Found lib folder at: $REAL_LIB_DIR"
+            cp -R "$REAL_LIB_DIR/"* /tmp/repo/lib/
+          else
+            echo "CRITICAL: lib folder not found in repository!"
+            exit 1;
+          fi
+          
+          if [ -n "$REAL_PUBSPEC" ]; then
+            echo "Found pubspec.yaml at: $REAL_PUBSPEC"
+            cp "$REAL_PUBSPEC" /tmp/repo/pubspec.yaml
+          else
+            echo "CRITICAL: pubspec.yaml not found in repository!"
+            exit 1;
+          fi
 
-          echo ">>> Purging local workspace to remove corrupted v1 layout..."
+          echo ">>> Purging local workspace to remove corrupted files..."
           find . -mindepth 1 -maxdepth 1 -exec rm -rf {} \;
 
       # ----------------------------------------------------
@@ -40,7 +56,7 @@ workflows:
           flutter create --project-name mishon_ems_mobile --platforms=android .
 
       # ----------------------------------------------------
-      # 3. RESTORE APP SOURCE FILES & FIX IMPORT MAPPING
+      # 3. RESTORE APP SOURCE FILES
       # ----------------------------------------------------
       - name: Restore app source files
         script: |
@@ -51,12 +67,6 @@ workflows:
           echo ">>> Restoring production pubspec configuration file..."
           if [ -f /tmp/repo/pubspec.yaml ]; then
             cp /tmp/repo/pubspec.yaml ./pubspec.yaml
-          fi
-
-          echo ">>> Injecting missing app_state import into main.dart..."
-          # This inserts the required import at the very first line of main.dart
-          if [ -f "lib/main.dart" ]; then
-            sed -i '1s/^/import '\''app_state.dart'\'';\n/' lib/main.dart
           fi
 
           flutter pub get
