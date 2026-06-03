@@ -1,82 +1,49 @@
+# Codemagic Continuous Integration Engine Pipeline Matrix
 workflows:
-  build_app:
-    name: Universal Flutter Builder
-    instance_type: mac_mini_m1
-    max_build_duration: 60
-
+  android-release-build:
+    name: Mishon EMS Android Release APK Compiler
+    max_build_duration: 30
+    instance_type: linux # Cost-effective and optimal for dedicated Linux/Android toolchain compilation
+    
     environment:
+      groups:
+        # If signing properties are added later via Keystore tools, declare variables here.
       flutter: stable
+      java: 17
+
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+        - pattern: master
 
     scripts:
+      - name: Initialize Android Local Execution Properties Mapping
+        script: | 
+          echo "flutter.sdk=$FLUTTER_ROOT" > android/local.properties
 
-      # ----------------------------------------------------
-      # 1. BACKUP REPO FILES
-      # ----------------------------------------------------
-      - name: Backup repository
+      - name: Validate System Packages and Pull Dependencies
         script: |
-          echo ">>> Backing up repository files..."
-          mkdir -p /tmp/repo
-          rsync -av ./ /tmp/repo/ \
-            --exclude ".git" \
-            --exclude "build" \
-            --exclude ".dart_tool"
-
-          echo ">>> Cleaning workspace..."
-          find . -mindepth 1 -maxdepth 1 -exec rm -rf {} \;
-
-      # ----------------------------------------------------
-      # 2. CREATE FRESH FLUTTER PROJECT
-      # ----------------------------------------------------
-      - name: Scaffold Flutter project
-        script: |
-          echo ">>> Creating fresh Flutter project..."
-          flutter create --project-name mishon_aoi_inspector --platforms=android .
-
-      # ----------------------------------------------------
-      # 3. RESTORE LIB + PUBSPEC
-      # ----------------------------------------------------
-      - name: Restore app source files
-        script: |
-          echo ">>> Restoring lib folder..."
-          rm -rf lib
-          cp -R /tmp/repo/lib ./lib
-
-          echo ">>> Restoring pubspec.yaml if exists..."
-          if [ -f /tmp/repo/pubspec.yaml ]; then
-            cp /tmp/repo/pubspec.yaml ./pubspec.yaml
-          fi
-
           flutter pub get
 
-      # ----------------------------------------------------
-      # 4. APPLY ANDROID OVERRIDES
-      # ----------------------------------------------------
-      - name: Apply Android overrides
+      - name: Validate Framework Integrity Code Check
         script: |
-          echo ">>> Applying Android override files..."
+          flutter analyze --fatal-infos --fatal-warnings
 
-          # AndroidManifest.xml
-          if [ -f "/tmp/repo/android_overrides/app/src/main/AndroidManifest.xml" ]; then
-            echo ">>> Copying AndroidManifest.xml"
-            cp /tmp/repo/android_overrides/app/src/main/AndroidManifest.xml \
-               android/app/src/main/AndroidManifest.xml
-          fi
-
-          # RES folder including xml/network_security_config.xml
-          if [ -d "/tmp/repo/android_overrides/app/src/main/res" ]; then
-            echo ">>> Copying RES folder"
-            rsync -av /tmp/repo/android_overrides/app/src/main/res/ \
-               android/app/src/main/res/
-          fi
-
-      # ----------------------------------------------------
-      # 5. BUILD ANDROID APK
-      # ----------------------------------------------------
-      - name: Build APK
+      - name: Execute Android Target Pipeline Compilation
         script: |
-          echo ">>> Building APK..."
-          flutter pub get
+          # Compiles a standard Release APK split into fat or universal binaries
           flutter build apk --release
 
     artifacts:
       - build/app/outputs/flutter-apk/*.apk
+
+    publishing:
+      email:
+        recipients:
+          # Change this to your monitoring or delivery distribution address
+          - appropose023@ai-gcloud
+        notify:
+          success: true
+          failure: true
