@@ -40,7 +40,7 @@ workflows:
           flutter create --project-name mishon_ems_mobile --platforms=android .
 
       # ----------------------------------------------------
-      # 3. RESTORE APP SOURCE FILES & INJECT PUBSPEC
+      # 3. RESTORE APP SOURCE FILES & FIX IMPORT MAPPING
       # ----------------------------------------------------
       - name: Restore app source files
         script: |
@@ -53,10 +53,16 @@ workflows:
             cp /tmp/repo/pubspec.yaml ./pubspec.yaml
           fi
 
+          echo ">>> Injecting missing app_state import into main.dart..."
+          # This inserts the required import at the very first line of main.dart
+          if [ -f "lib/main.dart" ]; then
+            sed -i '1s/^/import '\''app_state.dart'\'';\n/' lib/main.dart
+          fi
+
           flutter pub get
 
       # ----------------------------------------------------
-      # 4. INJECT NETWORK EXCEPTIONS (NO EXTERNAL DEPENDENCY)
+      # 4. INJECT NETWORK EXCEPTIONS
       # ----------------------------------------------------
       - name: Inject Production Manifest and Cleartext Exceptions
         script: |
