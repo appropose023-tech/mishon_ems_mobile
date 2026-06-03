@@ -2,9 +2,9 @@ workflows:
   android-release-build:
     name: Mishon EMS Android Release APK Compiler
     max_build_duration: 30
-    instance_type: mac_mini_m2 # Required for Codemagic's free plan allocation
+    instance_type: mac_mini_m2 # Free tier allocation
     working_directory: mishon_ems_mobile
-    
+
     environment:
       flutter: stable
       java: 17
@@ -17,30 +17,16 @@ workflows:
         - pattern: 'master'
 
     scripts:
-      - name: Initialize Android Local Execution Properties Mapping
-        script: | 
-          # Fallback check to ensure we are in the correct subfolder
-          if [ -d "mishon_ems_mobile" ]; then cd mishon_ems_mobile; fi
-          
-          # Force create the android directory if it is missing from Git tracking
-          mkdir -p android
-          
-          # Generate the local execution paths mapping
-          echo "flutter.sdk=$FLUTTER_ROOT" > android/local.properties
-
       - name: Validate System Packages and Pull Dependencies
         script: |
-          if [ -d "mishon_ems_mobile" ]; then cd mishon_ems_mobile; fi
           flutter pub get
 
       - name: Validate Framework Integrity Code Check
         script: |
-          if [ -d "mishon_ems_mobile" ]; then cd mishon_ems_mobile; fi
           flutter analyze --fatal-infos --fatal-warnings
 
       - name: Execute Android Target Pipeline Compilation
         script: |
-          if [ -d "mishon_ems_mobile" ]; then cd mishon_ems_mobile; fi
           flutter build apk --release
 
     artifacts:
