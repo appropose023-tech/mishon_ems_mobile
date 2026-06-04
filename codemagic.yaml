@@ -52,7 +52,6 @@ workflows:
       - name: Scaffold Flutter project
         script: |
           echo ">>> Generating flawless modern Android container structure..."
-          # Uses standard default reverse-domain naming to stay aligned with the manifest activity mapping
           flutter create --project-name mishon_ems_mobile --org com.example --platforms=android .
 
       # ----------------------------------------------------
@@ -79,12 +78,13 @@ workflows:
           flutter pub get
 
       # ----------------------------------------------------
-      # 4. INJECT NETWORK CONFIG & STANDARD NATIVE MANIFEST
+      # 4. INJECT NETWORK CONFIG, STYLES, & MANIFEST
       # ----------------------------------------------------
-      - name: Inject Production Manifest and Cleartext Exceptions
+      - name: Inject Production Manifest, Themes, and Cleartext Exceptions
         script: |
           echo ">>> Creating clean, explicit Android resource directories..."
           mkdir -p android/app/src/main/res/xml
+          mkdir -p android/app/src/main/res/values
 
           echo ">>> Writing cleartext routing permissions for cloud VM infrastructure..."
           cat << 'EOF' > android/app/src/main/res/xml/network_security_config.xml
@@ -96,6 +96,19 @@ workflows:
                   <domain includeSubdomains="true">104.154.76.47</domain>
               </domain-config>
           </network-security-config>
+          EOF
+
+          echo ">>> Injecting mandatory launcher style themes..."
+          cat << 'EOF' > android/app/src/main/res/values/styles.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <style name="LaunchTheme" parent="Theme.AppCompat.Light.NoActionBar">
+                  <item name="android:windowBackground">@drawable/launch_background</item>
+              </style>
+              <style name="NormalTheme" parent="Theme.AppCompat.Light.NoActionBar">
+                  <item name="android:windowBackground">?android:colorBackground</item>
+              </style>
+          </resources>
           EOF
 
           echo ">>> Injecting system-standard AndroidManifest layout..."
