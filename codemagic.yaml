@@ -69,18 +69,16 @@ workflows:
           fi
 
           echo ">>> Auto-injecting missing state engine imports across components..."
-          # Fixes main.dart mapping
           if [ -f "lib/main.dart" ]; then
             sed -i '1s/^/import '\''app_state.dart'\'';\n/' lib/main.dart
           fi
 
-          # Dynamically finds every screen throwing a type error and prepends the import path
           find lib/screens/ -name "*.dart" -exec sed -i '1s/^/import '\''..\/app_state.dart'\'';\n/' {} \;
 
           flutter pub get
 
       # ----------------------------------------------------
-      # 4. INJECT NETWORK EXCEPTIONS
+      # 4. INJECT NETWORK EXCEPTIONS & VISIBLE HOME LAUNCHER
       # ----------------------------------------------------
       - name: Inject Production Manifest and Cleartext Exceptions
         script: |
@@ -99,7 +97,7 @@ workflows:
           </network-security-config>
           EOF
 
-          echo ">>> Injecting modern v2 AndroidManifest structure..."
+          echo ">>> Injecting modern v2 AndroidManifest structure with visible Home Screen Launcher..."
           cat << 'EOF' > android/app/src/main/AndroidManifest.xml
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <uses-permission android:name="android.permission.INTERNET" />
@@ -112,8 +110,9 @@ workflows:
                   <meta-data
                       android:name="flutterEmbedding"
                       android:value="2" />
+                  
                   <activity
-                      android:name="io.flutter.embedding.android.FlutterActivity"
+                      android:name=".MainActivity"
                       android:exported="true"
                       android:launchMode="singleTop"
                       android:theme="@style/LaunchTheme"
