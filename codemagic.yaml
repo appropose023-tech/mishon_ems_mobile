@@ -78,7 +78,7 @@ workflows:
           flutter pub get
 
       # ----------------------------------------------------
-      # 4. INJECT NETWORK CONFIG, NATIVE THEMES, & MANIFEST
+      # 4. INJECT NETWORK CONFIG, STABLE VALUES, & MANIFEST
       # ----------------------------------------------------
       - name: Inject Production Manifest, Themes, and Cleartext Exceptions
         script: |
@@ -98,15 +98,15 @@ workflows:
           </network-security-config>
           EOF
 
-          echo ">>> Injecting system-compliant core platform styles..."
+          echo ">>> Injecting pure core Android platform styles..."
           cat << 'EOF' > android/app/src/main/res/values/styles.xml
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
-              <!-- Standard native Flutter base definitions require no external dependencies -->
-              <style name="LaunchTheme" parent="Theme.FlutterNoActionBar">
+              <!-- Uses standard device-native themes that require zero dependencies or mappings -->
+              <style name="LaunchTheme" parent="@android:style/Theme.Black.NoTitleBar">
                   <item name="android:windowBackground">@drawable/launch_background</item>
               </style>
-              <style name="NormalTheme" parent="Theme.FlutterNoActionBar">
+              <style name="NormalTheme" parent="@android:style/Theme.Black.NoTitleBar">
                   <item name="android:windowBackground">?android:colorBackground</item>
               </style>
           </resources>
