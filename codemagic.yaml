@@ -24,7 +24,6 @@ workflows:
           echo ">>> Locating and archiving working application state..."
           mkdir -p /tmp/repo/lib
           
-          # Find where the true lib directory is hiding in the repo layout
           REAL_LIB_DIR=$(find . -type d -name "lib" | grep -v "node_modules" | head -n 1)
           REAL_PUBSPEC=$(find . -type f -name "pubspec.yaml" | head -n 1)
           
@@ -56,7 +55,7 @@ workflows:
           flutter create --project-name mishon_ems_mobile --platforms=android .
 
       # ----------------------------------------------------
-      # 3. RESTORE APP SOURCE FILES
+      # 3. RESTORE SOURCE FILES AND AUTO-RESOLVE IMPORTS
       # ----------------------------------------------------
       - name: Restore app source files
         script: |
@@ -68,6 +67,15 @@ workflows:
           if [ -f /tmp/repo/pubspec.yaml ]; then
             cp /tmp/repo/pubspec.yaml ./pubspec.yaml
           fi
+
+          echo ">>> Auto-injecting missing state engine imports across components..."
+          # Fixes main.dart mapping
+          if [ -f "lib/main.dart" ]; then
+            sed -i '1s/^/import '\''app_state.dart'\'';\n/' lib/main.dart
+          fi
+
+          # Dynamically finds every screen throwing a type error and prepends the import path
+          find lib/screens/ -name "*.dart" -exec sed -i '1s/^/import '\''..\/app_state.dart'\'';\n/' {} \;
 
           flutter pub get
 
