@@ -52,7 +52,8 @@ workflows:
       - name: Scaffold Flutter project
         script: |
           echo ">>> Generating flawless modern Android container structure..."
-          flutter create --project-name mishon_ems_mobile --org com.mishon --platforms=android .
+          # Uses standard default reverse-domain naming to stay aligned with the manifest activity mapping
+          flutter create --project-name mishon_ems_mobile --org com.example --platforms=android .
 
       # ----------------------------------------------------
       # 3. RESTORE SOURCE FILES AND AUTO-RESOLVE IMPORTS
@@ -78,22 +79,12 @@ workflows:
           flutter pub get
 
       # ----------------------------------------------------
-      # 4. INJECT NETWORK CONFIG & COMPLIANT MANIFEST
+      # 4. INJECT NETWORK CONFIG & STANDARD NATIVE MANIFEST
       # ----------------------------------------------------
       - name: Inject Production Manifest and Cleartext Exceptions
         script: |
-          echo ">>> Creating clean, explicit Android source directories..."
-          rm -rf android/app/src/main/kotlin
-          mkdir -p android/app/src/main/kotlin/com/mishon/mishon_ems_mobile
+          echo ">>> Creating clean, explicit Android resource directories..."
           mkdir -p android/app/src/main/res/xml
-
-          echo ">>> Forcing structural sync on MainActivity code layout..."
-          cat << 'EOF' > android/app/src/main/kotlin/com/mishon/mishon_ems_mobile/MainActivity.kt
-          package com.mishon.mishon_ems_mobile
-          import io.flutter.embedding.android.FlutterActivity
-          class MainActivity: FlutterActivity() {
-          }
-          EOF
 
           echo ">>> Writing cleartext routing permissions for cloud VM infrastructure..."
           cat << 'EOF' > android/app/src/main/res/xml/network_security_config.xml
@@ -107,11 +98,12 @@ workflows:
           </network-security-config>
           EOF
 
-          echo ">>> Injecting modern v2 Manifest matching modern Gradle specifications..."
+          echo ">>> Injecting system-standard AndroidManifest layout..."
           cat << 'EOF' > android/app/src/main/AndroidManifest.xml
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <uses-permission android:name="android.permission.INTERNET" />
               <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+              
               <application
                   android:label="Mishon EMS"
                   android:name="${applicationName}"
@@ -120,6 +112,7 @@ workflows:
                   <meta-data
                       android:name="flutterEmbedding"
                       android:value="2" />
+                  
                   <activity
                       android:name=".MainActivity"
                       android:exported="true"
