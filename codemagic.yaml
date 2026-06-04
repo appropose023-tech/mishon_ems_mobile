@@ -52,7 +52,8 @@ workflows:
       - name: Scaffold Flutter project
         script: |
           echo ">>> Generating flawless modern Android container structure..."
-          flutter create --project-name mishon_ems_mobile --platforms=android .
+          # Force a clean, standard base package naming structure
+          flutter create --project-name mishon_ems_mobile --org com.mishon --platforms=android .
 
       # ----------------------------------------------------
       # 3. RESTORE SOURCE FILES AND AUTO-RESOLVE IMPORTS
@@ -78,12 +79,22 @@ workflows:
           flutter pub get
 
       # ----------------------------------------------------
-      # 4. INJECT NETWORK EXCEPTIONS & VISIBLE HOME LAUNCHER
+      # 4. INJECT NETWORK EXCEPTIONS & LOCK DOWN LAUNCHER ACTIVITY
       # ----------------------------------------------------
       - name: Inject Production Manifest and Cleartext Exceptions
         script: |
-          echo ">>> Setting up application directories..."
+          echo ">>> Creating clean, explicit Android source directories..."
+          rm -rf android/app/src/main/kotlin
+          mkdir -p android/app/src/main/kotlin/com/mishon/ems
           mkdir -p android/app/src/main/res/xml
+
+          echo ">>> Forcing structural sync on MainActivity code layout..."
+          cat << 'EOF' > android/app/src/main/kotlin/com/mishon/ems/MainActivity.kt
+          package com.mishon.ems
+          import io.flutter.embedding.android.FlutterActivity
+          class MainActivity: FlutterActivity() {
+          }
+          EOF
 
           echo ">>> Writing cleartext routing permissions for cloud VM infrastructure..."
           cat << 'EOF' > android/app/src/main/res/xml/network_security_config.xml
@@ -97,9 +108,10 @@ workflows:
           </network-security-config>
           EOF
 
-          echo ">>> Injecting modern v2 AndroidManifest structure with visible Home Screen Launcher..."
+          echo ">>> Injecting locked-down v2 Manifest mapped directly to com.mishon.ems.MainActivity..."
           cat << 'EOF' > android/app/src/main/AndroidManifest.xml
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+              package="com.mishon.ems">
               <uses-permission android:name="android.permission.INTERNET" />
               <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
               <application
@@ -110,9 +122,8 @@ workflows:
                   <meta-data
                       android:name="flutterEmbedding"
                       android:value="2" />
-                  
                   <activity
-                      android:name=".MainActivity"
+                      android:name="com.mishon.ems.MainActivity"
                       android:exported="true"
                       android:launchMode="singleTop"
                       android:theme="@style/LaunchTheme"
