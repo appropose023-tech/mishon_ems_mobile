@@ -14,11 +14,49 @@ class _IdentityGatewayPortalState extends State<IdentityGatewayPortal> {
   final TextEditingController _userController = TextEditingController();
   final TextEditingController _passController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  bool _isAuthenticating = false;
+
+  void _processAuthentication(BuildContext context) async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isAuthenticating = true);
+    final state = Provider.of<EMSStateEngine>(context, listen: false);
+
+    // Properly await the network future response from your GCP server
+    bool pass = await state.authenticateUser(
+      _userController.text.trim(), 
+      _passController.text.trim()
+    );
+
+    setState(() => _isAuthenticating = false);
+
+    if (pass) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Authenticated: ${state.currentUser?.username.toUpperCase()} [Role: ${state.currentUser?.role.toUpperCase()}]"),
+          backgroundColor: const Color(0xFF008080),
+        ),
+      );
+      
+      // Navigates directly to the role-filtering engine inside dashboard.dart
+      Navigator.pushReplacement(
+        context, 
+        MaterialPageRoute(builder: (_) => const DashboardScreen())
+      );
+    } else {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Authentication Failed: Invalid credentials or offline terminal server."),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final state = Provider.of<EMSStateEngine>(context, listen: false);
-    
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       body: SafeArea(
@@ -49,13 +87,14 @@ class _IdentityGatewayPortalState extends State<IdentityGatewayPortal> {
                           ),
                           const SizedBox(height: 8),
                           const Text(
-                            "Floor Verification Terminal Gateway",
+                            "Unified Floor Verification Terminal",
                             textAlign: TextAlign.center,
                             style: TextStyle(fontSize: 14, color: Color(0xFF008080), fontWeight: FontWeight.w500),
                           ),
                           const SizedBox(height: 32),
                           TextFormField(
                             controller: _userController,
+                            enabled: !_isAuthenticating,
                             decoration: const InputDecoration(
                               labelText: "Operator Username",
                               border: OutlineInputBorder(),
@@ -67,6 +106,7 @@ class _IdentityGatewayPortalState extends State<IdentityGatewayPortal> {
                           TextFormField(
                             controller: _passController,
                             obscureText: true,
+                            enabled: !_isAuthenticating,
                             decoration: const InputDecoration(
                               labelText: "Secure Token Password",
                               border: OutlineInputBorder(),
@@ -75,26 +115,17 @@ class _IdentityGatewayPortalState extends State<IdentityGatewayPortal> {
                             validator: (v) => v!.isEmpty ? "Password required" : null,
                           ),
                           const SizedBox(height: 24),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF008080),
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                            ),
-                            onPressed: () {
-                              if (_formKey.currentState!.validate()) {
-                                bool pass = state.authenticateUser(_userController.text, _passController.text);
-                                if (pass) {
-                                  Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const PrimaryDashboardRouter()));
-                                } else {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text("Authentication Failed: Security Denied.")),
-                                  );
-                                }
-                              }
-                            },
-                            child: const Text("AUTHENTICATE SYSTEM ACCESS", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                          ),
+                          _isAuthenticating
+                              ? const Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF008080))))
+                              : ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF008080),
+                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                  ),
+                                  onPressed: () => _processAuthentication(context),
+                                  child: const Text("AUTHENTICATE SYSTEM ACCESS", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                ),
                         ],
                       ),
                     ),
@@ -118,7 +149,7 @@ class _IdentityGatewayPortalState extends State<IdentityGatewayPortal> {
       ),
       padding: const EdgeInsets.all(12),
       child: const Text(
-        "Mishon Solutions | www.mishonsolutions.com | contact: noreply@mishonsolutions.com +91 9223135678",
+        "Mishon Solutions | www.mishonsolutions.com | contact: info@mishonsolutions.com",
         textAlign: TextAlign.center,
         style: TextStyle(fontSize: 10, color: Color(0xFF004d4d), fontWeight: FontWeight.w600),
       ),
