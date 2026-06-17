@@ -1,108 +1,269 @@
 import 'package:flutter/material.dart';
-import 'models.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'models.dart'; 
 
 class EMSStateEngine extends ChangeNotifier {
+  final String baseUrl = "http://104.154.76.47:5050"; 
   UserProfile? currentUser;
   DateTime? activePunchInTime;
+  
   List<JobBatch> batches = [];
   List<LedgerEntry> materialLedger = [];
   List<FloorTarget> targetingMatrix = [];
   Map<String, Map<String, int>> processingCounters = {}; // batchNo -> (TOP/BOTTOM) -> quantityDone
+  List<dynamic> rawHourlyLogs = []; // Preserved to display logs in Analytics UI
+  
+  bool isLoading = false;
 
-  EMSStateEngine() {
-    _seedInitialOperationalContext();
+  EMSStateEngine();
+
+  /// Safely extracts the cumulative processed quantity for a specific batch and layer side
+  int getLayerRunningTotal(String batchNo, String layer) {
+    if (processingCounters.containsKey(batchNo)) {
+      final layerMap = processingCounters[batchNo];
+      if (layerMap != null && layerMap.containsKey(layer)) {
+        return layerMap[layer] ?? 0;
+      }
+    }
+    return 0;
   }
 
-  void _seedInitialOperationalContext() {
-    batches.addAll([
-      JobBatch(batchNo: "KD/26/001", jobName: "JOB-A", clientName: "Alpha Corp", projectName: "PCB-Mainframe", initialQty: 1200),
-      JobBatch(batchNo: "KD/26/002", jobName: "JOB-B", clientName: "Beta Electronics", projectName: "IoT-Sensor-Node", initialQty: 500),
-    ]);
+  /// Synchronizes all operational tables from the Flask database pipeline safely
+  Future<void> fetchAndSyncFromBackend() async {
+    isLoading = true;
+    notifyListeners();
     
-    targetingMatrix.addAll([
-      FloorTarget(batchNo: "KD/26/001", segment: "SMT", team: "Production", targetQty: 800),
-      FloorTarget(batchNo: "KD/26/001", segment: "SMT", team: "Quality", targetQty: 800),
-    ]);
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/api/sync'));
+      debugPrint("📡 Sync Response Status: ${response.statusCode}");
+      
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        debugPrint("📡 Backend Payload Keys: ${data.keys.toList()}");
+        
+        // 1. Sync Ledger History
+        final List fetchedLedger = data['ledger'] ?? [];
+        materialLedger = fetchedLedger.map((l) => LedgerEntry.fromJson(l)).toList();
+
+        // 2. Sync Floor Targets Matrix
+        final List fetchedTargets = data['targets'] ?? data['floor_targets'] ?? [];
+        targetingMatrix = fetchedTargets.map((t) => FloorTarget.fromJson(t)).toList();
+
+        // 3. Clear and compile Hourly processing counters
+        processingCounters.clear();
+        rawHourlyLogs = data['hourly_logs'] ?? [];
+        for (var log in rawHourlyLogs) {
+          String bNo = log['batch_no']?.toString() ?? '';
+          String side = log['side']?.toString() ?? 'TOP';
+          int done = int.tryParse(log['qty_done']?.toString() ?? '0') ?? 0;
+          
+          processingCounters.putIfAbsent(bNo, () => {'TOP': 0, 'BOTTOM': 0});
+          processingCounters[bNo]![side] = (processingCounters[bNo]![side] ?? 0) + done;
+        }
+
+        // 4. SECURE ROLE-BASED BATCH AND DYNAMIC INVENTORY CALCULATIONS
+        final List fetchedBatches = data['batches'] ?? data['job_batches'] ?? [];
+        List<JobBatch> processedList = [];
+
+        final String role = (currentUser?.role ?? 'operator').trim().toLowerCase();
+        final String currentSegment = currentUser?.segment ?? 'None';
+
+        for (var b in fetchedBatches) {
+          JobBatch batchObj = JobBatch.fromJson(b);
+          
+          // RULE: Closed batches are hidden completely from Operators & Supervisors everywhere
+          if (batchObj.status == 'CLOSED' && (role != 'admin' && role != 'manager')) {
+            continue; 
+          }
+
+          // Management Rule: Admins and Managers see all batches with their uninhibited full quantities
+          if (role == 'admin' || role == 'manager') {
+            processedList.add(batchObj);
+            continue;
+          }
+
+          // Operator/Supervisor Logic: Calculate current localized slice based on ledger movements
+          int dynamicAllocatedQty = 0;
+
+          // SMT serves as the initial landing stage, starting with the total kit capacity
+          if (currentSegment == 'SMT') {
+            dynamicAllocatedQty = batchObj.initialQty;
+          }
+
+          // Scan the ledger chain to deduce current dynamic balance inside this account's segment
+          for (var entry in materialLedger) {
+            if (entry.batchNo == batchObj.batchNo) {
+              if (entry.toStage == currentSegment) {
+                dynamicAllocatedQty += entry.qtyTransferred;
+              }
+              if (entry.fromStage == currentSegment) {
+                dynamicAllocatedQty -= entry.qtyTransferred;
+              }
+            }
+          }
+
+          // Structural Visibility Cap: Only expose the batch to the user if their current location slice > 0
+          if (dynamicAllocatedQty > 0) {
+            processedList.add(JobBatch(
+              batchNo: batchObj.batchNo,
+              jobName: batchObj.jobName,
+              clientName: batchObj.clientName,
+              projectName: batchObj.projectName,
+              initialQty: dynamicAllocatedQty, // Overwritten to reflect their restricted balance slice
+              status: batchObj.status
+            ));
+          }
+        }
+
+        batches = processedList;
+      }
+    } catch (e) {
+      debugPrint("Sync Parsing Core Error Exception: $e");
+    } finally {
+      isLoading = false;
+      notifyListeners();
+    }
   }
 
-  bool authenticateUser(String username, String password) {
-    String lowerName = username.toLowerCase();
-    if (lowerName == 'admin' && password == 'admin123') {
-      currentUser = UserProfile(username: "admin", role: "admin", team: "None", segment: "None");
-    } else if (lowerName == 'manager' && password == 'manager123') {
-      currentUser = UserProfile(username: "manager1", role: "manager", team: "None", segment: "None");
-    } else if (lowerName == 'supervisor' && password == 'super123') {
-      currentUser = UserProfile(username: "super_smt", role: "supervisor", team: "Production", segment: "SMT");
-    } else if (lowerName == 'technician' && password == 'tech123') {
-      currentUser = UserProfile(username: "tech_th_qc", role: "technician", team: "Quality", segment: "Through hole");
-    } else {
+  Future<bool> authenticateUser(String username, String password) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/login'),
+        headers: {"Content-Type": "application/json"},
+        body: json.encode({"username": username, "password": password}),
+      );
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true && data['user'] != null) {
+          final u = data['user'];
+          currentUser = UserProfile(
+            username: u['username'] ?? '',
+            role: u['role'] ?? 'operator',
+            team: u['team'] ?? 'None',
+            segment: u['segment'] ?? 'None',
+          );
+          await fetchAndSyncFromBackend();
+          return true;
+        }
+      }
+      return false;
+    } catch (e) {
       return false;
     }
-    notifyListeners();
-    return true;
   }
 
-  void clearSession() {
-    currentUser = null;
-    activePunchInTime = null;
-    notifyListeners();
-  }
-
-  void toggleShiftPunch(bool punchIn) {
-    activePunchInTime = punchIn ? DateTime.now() : null;
-    notifyListeners();
-  }
-
-  int getLayerRunningTotal(String batchNo, String side) {
-    return processingCounters[batchNo]?[side] ?? 0;
-  }
-
-  void commitHourlyStatus(String batchNo, String side, int amount) {
-    if (!processingCounters.containsKey(batchNo)) {
-      processingCounters[batchNo] = {"TOP": 0, "BOTTOM": 0};
+  Future<void> toggleShiftPunch(bool punchIn) async {
+    if (punchIn) {
+      activePunchInTime = DateTime.now();
+    } else {
+      activePunchInTime = null;
     }
-    processingCounters[batchNo]![side] = (processingCounters[batchNo]![side] ?? 0) + amount;
     notifyListeners();
+    await Future.delayed(const Duration(milliseconds: 400));
   }
 
-  void closeBatchProcessingBlock(String batchNo) {
-    final idx = batches.indexWhere((element) => element.batchNo == batchNo);
-    if (idx != -1) {
-      batches[idx].status = 'CLOSED';
-      notifyListeners();
+  Future<void> logHourlyStatus(String batchNo, String side, int qty, String comments) async {
+    try {
+      await http.post(
+        Uri.parse('$baseUrl/api/log_hourly'),
+        headers: {"Content-Type": "application/json"},
+        body: json.encode({
+          "batch_no": batchNo,
+          "side": side,
+          "qty_done": qty,
+          "operator": currentUser?.username ?? 'unknown',
+          "comments": comments
+        }),
+      );
+      await fetchAndSyncFromBackend();
+    } catch (e) {
+      debugPrint("Hourly status upload exception: $e");
     }
   }
 
-  void dispatchBillingClearance(String batchNo) {
-    final idx = batches.indexWhere((element) => element.batchNo == batchNo);
-    if (idx != -1) {
-      batches[idx].status = 'DISPATCHED';
-      notifyListeners();
+  Future<void> transmitBatchCloseEvent(String batchNo) async {
+    try {
+      await http.post(
+        Uri.parse('$baseUrl/api/close_batch'),
+        headers: {"Content-Type": "application/json"},
+        body: json.encode({"batch_no": batchNo, "status": "CLOSED"}),
+      );
+      await fetchAndSyncFromBackend();
+    } catch (e) {
+      debugPrint("Failed to transmit batch state close event: $e");
     }
   }
 
-  void injectLedgerTransaction({
+  Future<String?> executeLedgerTransfer(String batchNo, String fromStage, String toStage, int qty, String remarks) async {
+    if (currentUser == null) return "Authorization error: Missing active operational token.";
+
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/ledger_transfer'),
+        headers: {"Content-Type": "application/json"},
+        body: json.encode({
+          "batch_no": batchNo,
+          "from_stage": fromStage,
+          "to_stage": toStage,
+          "qty": qty,
+          "operator": currentUser!.username,
+          "comments": remarks
+        }),
+      );
+      final data = json.decode(response.body);
+      if (response.statusCode == 200 && data['success'] == true) {
+        await fetchAndSyncFromBackend();
+        return null;
+      } else {
+        return data['message'] ?? "Failed to authorize data transfer handshake transaction.";
+      }
+    } catch (e) {
+      return "Network structural communication failure.";
+    }
+  }
+
+  Future<String?> injectLedgerTransaction({
     required String batchNo,
     required String fromStage,
     required String toStage,
     required int qty,
     required String operator,
-    required String remarks,
-  }) {
-    materialLedger.add(LedgerEntry(
-      batchNo: batchNo,
-      fromStage: fromStage,
-      toStage: toStage,
-      qtyTransferred: qty,
-      timestamp: DateTime.now(),
-      operator: operator,
-      comments: remarks,
-    ));
-    notifyListeners();
+    required String comments,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/ledger_transfer'),
+        headers: {"Content-Type": "application/json"},
+        body: json.encode({
+          "batch_no": batchNo,
+          "from_stage": fromStage,
+          "to_stage": toStage,
+          "qty": qty,
+          "operator": operator,
+          "comments": comments
+        }),
+      );
+      final data = json.decode(response.body);
+      if (response.statusCode == 200 && data['success'] == true) {
+        await fetchAndSyncFromBackend();
+        return null; 
+      } else {
+        return data['message'] ?? "Failed to save transaction.";
+      }
+    } catch (e) {
+      return "Network communication failure: $e";
+    }
   }
 
-  void provisionNewTarget(String batchNo, String segment, String team, int targetQty) {
-    targetingMatrix.add(FloorTarget(batchNo: batchNo, segment: segment, team: team, targetQty: targetQty));
+  void clearSession() {
+    currentUser = null;
+    activePunchInTime = null;
+    batches.clear();
+    materialLedger.clear();
+    targetingMatrix.clear();
+    processingCounters.clear();
+    rawHourlyLogs.clear();
     notifyListeners();
   }
 }
